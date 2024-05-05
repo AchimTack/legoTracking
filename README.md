@@ -3,7 +3,7 @@
 This repository contains Python scripts for tracking LEGO FLL robots using a ceiling-mounted webcam. They utilize two different tracking methods: ArUco Markers and CSRT Tracking.
 
 ## General Instructions
-Ensure the webcam is properly mounted overhead, looking down onto the table. Make sure to have consistent lighting and no over- or underexposure in webcam image. Webcam resolutions should exceed 1024*768px.
+Ensure the webcam is properly mounted overhead, looking down onto the table. Make sure to have consistent lighting and no over- or underexposure in webcam image. Webcam resolutions should exceed 1024*768px. Be aware code was in parts created using LLMs and is still in heavy need of refactoring.
 
 ## Dependencies
 Both scripts require the following Python libraries:
@@ -34,8 +34,5 @@ Key Features:
 Usage
 Run the script and interact with the webcam feed by clicking to define the object of interest by drawing a rectangle over it. Finish by pressing enter key. Tracking starts automatically. 
 Ensure the region includes the ArUco markers. End the tracking by clicking "q". Results are saved into folder "runs".
-
-Contributions
-Feel free to fork this project and submit your contributions via pull requests.
 
 
