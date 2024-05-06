@@ -5,6 +5,68 @@ import os
 import svgwrite
 
 
+def undistortField():
+    cap = cv2.VideoCapture(0)
+
+    if not cap.isOpened():
+        print("Error: Camera could not be opened.")
+        return
+    
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
+    parameters = cv2.aruco.DetectorParameters()
+    parameters.adaptiveThreshWinSizeStep = 2
+    parameters.adaptiveThreshWinSizeMin = 3
+    parameters.adaptiveThreshWinSizeMax = 23
+
+    matrix = None
+
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: Frame not captured.")
+                continue
+
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            corners, ids, rejected = cv2.aruco.detectMarkers(gray, dictionary, parameters=parameters)
+
+            if ids is not None:
+                centers = {}
+
+                for i, corner in enumerate(corners):
+                    center = np.mean(corner[0], axis=0)
+                    centers[ids[i][0]] = center
+                    if ids[i][0] not in [91, 92, 93, 94]:
+                        cv2.polylines(frame, [np.int32(corner)], True, (0, 255, 0), 2)
+                        cv2.putText(frame, str(ids[i][0]), tuple(np.int32(corner[0][0])), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2, cv2.LINE_AA)
+                
+                if all(key in centers for key in [91, 92, 93, 94]) and matrix is None:
+                    src_points = np.array([centers[92], centers[91], centers[93], centers[94]], dtype="float32")
+                    aspect_ratio = 100 / 200
+                    height = frame.shape[0]
+                    width = int(height * aspect_ratio)
+                    dst_points = np.array([
+                        [width, 0],
+                        [0, 0],
+                        [width, height],
+                        [0, height]
+                    ], dtype="float32")
+
+                    matrix = cv2.getPerspectiveTransform(src_points, dst_points)
+                    print('Found Distortion Matrix:')
+                    print(matrix)
+
+            if matrix is not None:
+                result = cv2.warpPerspective(frame, matrix, (width, height))
+                cv2.imshow('Transformed', result)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    finally:
+        cap.release()
+        cv2.destroyAllWindows()
+
+
 def apply_perspective_transform(src_points, dst_size=(1280, 1024)):
     dst_points = np.array([
         [0, 0],
