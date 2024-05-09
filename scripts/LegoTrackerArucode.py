@@ -1,123 +1,76 @@
 import cv2
-import numpy as np
+from functions import save_tracking_results, transform_points, is_point_inside_mask, detect_and_track_markers, get_perspective_transform_matrix, draw_transformed_tracks
 
-from functions import apply_perspective_transform, save_tracking_results
+def undistort_and_track():
+    print('starting...')
+    cap = cv2.VideoCapture(0)
+    frame_width = 1920
+    frame_height = 1080
 
-cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-cap.set(cv2.CAP_PROP_FOCUS, float('inf'))
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+    cap.set(cv2.CAP_PROP_FPS, 90)
 
-if not cap.isOpened():
-    print("Error: Webcam not accessible")
-    exit(0)
+    if not cap.isOpened():
+        print("Error: Camera could not be opened.")
+        return
 
-clicked_points = []
-rect_defined = False
-dragging_point = None
-mask_locked = False
-track_history = []
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
+    parameters = cv2.aruco.DetectorParameters()
+    parameters.adaptiveThreshWinSizeStep = 2
+    parameters.adaptiveThreshWinSizeMin = 3
+    parameters.adaptiveThreshWinSizeMax = 23
 
-def get_corners(event, x, y, flags, param):
-    global clicked_points, rect_defined, img, dragging_point
-    need_to_update = False
-    if event == cv2.EVENT_LBUTTONDOWN:
-        for idx, point in enumerate(clicked_points):
-            if abs(x - point[0]) < 10 and abs(y - point[1]) < 10:
-                dragging_point = idx
-                return
-        if len(clicked_points) < 4 and dragging_point is None:
-            clicked_points.append((x, y))
-            need_to_update = True
-        if len(clicked_points) == 4:
-            rect_defined = True
-    elif event == cv2.EVENT_MOUSEMOVE and dragging_point is not None:
-        clicked_points[dragging_point] = (x, y)
-        need_to_update = True
-    elif event == cv2.EVENT_LBUTTONUP:
-        dragging_point = None
-        need_to_update = True
+    matrix = None
+    mask_contour = None
+    tracking_colors = {}
+    tracking_points = {}
+    transformed_tracks = {}
+    width, height = 0, 0
+    result = None
 
-    if need_to_update:
-        img = frame.copy()
-        for point in clicked_points:
-            cv2.circle(img, point, 5, (0, 255, 0), -1)
-        if len(clicked_points) > 1:
-            for i in range(len(clicked_points)):
-                cv2.line(img, clicked_points[i], clicked_points[(i + 1) % len(clicked_points)], (0, 255, 0), 2)
-        cv2.imshow('Frame', img)
+    # Define which marker range is to be tracked (minimizes false-positives)
+    marker_ids_to_track = set(range(1, 4))
 
-ret, frame = cap.read()
-img = frame.copy()
-cv2.imshow('Frame', img)
-cv2.setMouseCallback('Frame', get_corners)
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: Frame not captured.")
+                continue
 
-while not mask_locked:
-    if not rect_defined or dragging_point is not None:
-        ret, frame = cap.read()
-        if not ret:
-            print("Error: Unable to read from webcam")
-            break
-        cv2.imshow('Frame', img if 'img' in locals() else frame)
-    key = cv2.waitKey(1)
-    if key & 0xFF == ord('m') and rect_defined:
-        mask_locked = True
-        cv2.destroyWindow('Frame')
-    elif key & 0xFF == ord('q'):
+            centers = detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tracking_points)
+
+            # Ensure perspective matrix is set using markers 91-94
+            if all(key in centers for key in [91, 92, 93, 94]) and matrix is None:
+                matrix, mask_contour, width, height = get_perspective_transform_matrix(centers, frame.shape)
+                print('Found Distortion Matrix:')
+                print(matrix)
+
+            if matrix is not None:
+                result = cv2.warpPerspective(frame, matrix, (width, height))
+
+                for marker_id in marker_ids_to_track:
+                    if marker_id in tracking_points:
+                        transformed_points = transform_points(tracking_points[marker_id], matrix)
+                        filtered_points = [point for point in transformed_points if is_point_inside_mask(point, mask_contour)]
+                        if filtered_points:
+                            transformed_tracks[tracking_colors[marker_id]] = filtered_points
+
+                draw_transformed_tracks(result, transformed_tracks)
+
+                rotated_frame = cv2.rotate(result, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                cv2.imshow('Transformed', rotated_frame)
+
+            #cv2.imshow('Original', frame)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    finally:
+        if result is not None:
+            save_tracking_results(result, transformed_tracks)
         cap.release()
         cv2.destroyAllWindows()
-        exit(0)
 
-src_pts = np.array(clicked_points, dtype="float32")
-transform_matrix = apply_perspective_transform(src_pts)
-dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
-parameters = cv2.aruco.DetectorParameters()
-detector = cv2.aruco.ArucoDetector(dictionary, parameters)
-
-midpoints = []
-path = []
-
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        print("Error: Unable to read from webcam")
-        break
-
-    if not mask_locked:
-        if rect_defined or dragging_point is not None:
-            img = frame.copy()
-            for point in clicked_points:
-                cv2.circle(img, point, 5, (0, 255, 0), -1)
-            if len(clicked_points) > 1:
-                for i in range(len(clicked_points)):
-                    cv2.line(img, clicked_points[i], clicked_points[(i + 1) % len(clicked_points)], (0, 255, 0), 2)
-            cv2.imshow('Frame', img)
-    else:
-        transformed_frame = cv2.warpPerspective(frame, transform_matrix, (1280, 1024))
-        markerCorners, markerIds, rejectedCandidates = detector.detectMarkers(transformed_frame)
-        if markerIds is not None:
-            cv2.aruco.drawDetectedMarkers(transformed_frame, markerCorners, markerIds)
-            for i, markerId in enumerate(markerIds):
-                if markerId[0] <=10:
-                    corners = markerCorners[i][0]
-                    midpoint = np.mean(corners, axis=0).astype(int)
-                    track_history.append(midpoint)
-
-        # Draw the track even if no new markers are detected
-        if track_history:
-            cv2.polylines(transformed_frame, [np.array(track_history, dtype=np.int32)], False, (0, 0, 255), 2)
-
-        cv2.imshow('Transformed Frame', transformed_frame)
-
-    key = cv2.waitKey(1)
-    if key & 0xFF == ord('m'):
-        mask_locked = True
-        cv2.destroyWindow('Frame')
-    elif key & 0xFF == ord('q'):
-        save_tracking_results(transformed_frame, track_history)
-        break
-
-# Exit clean up
-cap.release()
-cv2.destroyAllWindows()
-
+# Start detection and tracking
+undistort_and_track()
