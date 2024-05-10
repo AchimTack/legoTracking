@@ -25,14 +25,15 @@ def undistort_and_track():
     mask_contour = None
     tracking_colors = {}
     tracking_points = {}
-    transformed_tracks = {}
     width, height = 0, 0
     result = None
+    all_transformed_data = []  # Store all transformed data (frame, marker, x, y, orientation)
 
     # Define which marker range is to be tracked (minimizes false-positives)
     marker_ids_to_track = set(range(1, 4))
 
     try:
+        frame_counter = 0
         while True:
             ret, frame = cap.read()
             if not ret:
@@ -55,20 +56,22 @@ def undistort_and_track():
                         transformed_points = transform_points(tracking_points[marker_id], matrix)
                         filtered_points = [point for point in transformed_points if is_point_inside_mask(point, mask_contour)]
                         if filtered_points:
-                            transformed_tracks[tracking_colors[marker_id]] = filtered_points
+                            color = tracking_colors[marker_id]
+                            orientation = orientations.get(marker_id, '')
+                            all_transformed_data.append([frame_counter, marker_id, filtered_points[-1][0], filtered_points[-1][1], orientation])
 
-                draw_transformed_tracks(result, transformed_tracks)
-
+                draw_transformed_tracks(result, all_transformed_data, tracking_colors)
+ 
                 rotated_frame = cv2.rotate(result, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 cv2.imshow('Transformed', rotated_frame)
 
-            #cv2.imshow('Original', frame)
-
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
+
+            frame_counter += 1
     finally:
         if result is not None:
-            save_tracking_results(result, transformed_tracks)
+            save_tracking_results(result, all_transformed_data)
         cap.release()
         cv2.destroyAllWindows()
 

@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import svgwrite
 import csv
+import subprocess
 
 
 def generate_color(marker_id):
@@ -21,33 +22,48 @@ def generate_color(marker_id):
     ]
     return predefined_colors[(marker_id - 1) % len(predefined_colors)]
 
-
-def save_tracking_results(transformed_frame, tracks):
+def save_tracking_results(transformed_frame, all_transformed_data):
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     run_folder = f'runs/{timestamp}'
     if not os.path.exists(run_folder):
         os.makedirs(run_folder)
 
-    # Create a desaturated version of the transformed frame
-    desaturated_frame = cv2.cvtColor(transformed_frame, cv2.COLOR_BGR2HSV)
+    # Rotate the original frame first
+    rotated_frame = cv2.rotate(transformed_frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+    # Create a desaturated version of the rotated frame
+    desaturated_frame = cv2.cvtColor(rotated_frame, cv2.COLOR_BGR2HSV)
     desaturated_frame = desaturated_frame.astype(float)  # Convert to float for modification
     desaturated_frame[..., 1] *= 0.2  # Reduce saturation
     desaturated_frame = desaturated_frame.astype('uint8')  # Convert back to uint8
     desaturated_frame = cv2.cvtColor(desaturated_frame, cv2.COLOR_HSV2BGR)
 
-    # Draw tracking lines on the desaturated frame
-    for color, track in tracks.items():
+    # Create a copy to draw colorful tracks
+    colorful_frame = desaturated_frame.copy()
+
+    # Draw the tracks
+    tracks = {}
+    for frame, marker_id, x, y, _ in all_transformed_data:
+        if marker_id not in tracks:
+            tracks[marker_id] = []
+        # Adjust coordinates due to the rotation (90-degree counterclockwise)
+        adjusted_x = y  # New x after rotation
+        adjusted_y = rotated_frame.shape[0] - x  # New y after rotation
+        tracks[marker_id].append((adjusted_x, adjusted_y))
+
+    # Draw the tracks on the colorful frame
+    for marker_id, track in tracks.items():
+        color = generate_color(marker_id)
         for i in range(len(track) - 1):
             start_point = tuple(map(int, track[i]))
             end_point = tuple(map(int, track[i + 1]))
-            cv2.line(desaturated_frame, start_point, end_point, color, 2)
+            cv2.line(colorful_frame, start_point, end_point, color, 2)
 
-    # Rotate the desaturated frame
-    save_frame = cv2.rotate(desaturated_frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-    cv2.imwrite(f'{run_folder}/{timestamp}.jpg', save_frame)
+    # Save the final combined image (desaturated background with colorful tracks)
+    cv2.imwrite(f'{run_folder}/{timestamp}.jpg', colorful_frame)
 
     # Calculate the aspect ratio and define SVG dimensions
-    frame_height, frame_width = transformed_frame.shape[:2]
+    frame_height, frame_width = rotated_frame.shape[:2]
     aspect_ratio = frame_height / frame_width
     svg_width = 1000
     svg_height = int(svg_width * aspect_ratio)
@@ -55,34 +71,38 @@ def save_tracking_results(transformed_frame, tracks):
     # Create an SVG drawing with rotated dimensions
     dwg = svgwrite.Drawing(
         filename=f'{run_folder}/{timestamp}.svg',
-        size=(svg_height, svg_width),
-        viewBox=f'0 0 {svg_height} {svg_width}'
+        size=(svg_width, svg_height),
+        viewBox=f'0 0 {svg_width} {svg_height}'
     )
 
     # Add a grey rectangle as the background
-    grey_background = dwg.rect(insert=(0, 0), size=(svg_height, svg_width), fill='grey')
+    grey_background = dwg.rect(insert=(0, 0), size=(svg_width, svg_height), fill='grey')
     dwg.add(grey_background)
 
     # Draw the tracks in the rotated SVG
-    for color, track in tracks.items():
+    for marker_id, track in tracks.items():
+        color = generate_color(marker_id)
+        color_str = f'rgb({color[2]},{color[1]},{color[0]})'
         for i in range(len(track) - 1):
-            start_point = (int(track[i][1] * svg_height / frame_height), int(svg_width - (track[i][0] * svg_width / frame_width)))
-            end_point = (int(track[i + 1][1] * svg_height / frame_height), int(svg_width - (track[i + 1][0] * svg_width / frame_width)))
-            dwg.add(dwg.line(start=start_point, end=end_point, stroke=svgwrite.rgb(*color, '%')))
+            start_point = (
+                int(track[i][0] * svg_width / frame_width),
+                int(track[i][1] * svg_height / frame_height)
+            )
+            end_point = (
+                int(track[i + 1][0] * svg_width / frame_width),
+                int(track[i + 1][1] * svg_height / frame_height)
+            )
+            dwg.add(dwg.line(start=start_point, end=end_point, stroke=color_str, stroke_width=2))
 
-    # Save the rotated SVG
     dwg.save()
-
 
     # Save tracking data to a CSV file
     csv_file_path = f'{run_folder}/{timestamp}.csv'
     with open(csv_file_path, mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Frame', 'X', 'Y'])
-        for color, track in tracks.items():
-            for i, point in enumerate(track):
-                csv_writer.writerow([i, point[0], point[1]])
-
+        csv_writer.writerow(['Frame', 'Marker', 'X', 'Y', 'Orientation'])
+        csv_writer.writerows(all_transformed_data)
+        
 
 def transform_points(points, matrix):
     if not points or matrix is None:
@@ -135,6 +155,7 @@ def detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tra
     return centers, orientations
 
 
+
 def get_perspective_transform_matrix(centers, frame_shape):
     aspect_ratio = 114 / 205
     height = frame_shape[0]
@@ -154,7 +175,14 @@ def get_perspective_transform_matrix(centers, frame_shape):
     return matrix, mask_contour, width, height
 
 
-def draw_transformed_tracks(result, transformed_tracks):
-    for color, track in transformed_tracks.items():
+def draw_transformed_tracks(result, all_transformed_data, tracking_colors):
+    tracks = {}
+    for frame, marker_id, x, y, _ in all_transformed_data:
+        if marker_id not in tracks:
+            tracks[marker_id] = []
+        tracks[marker_id].append((x, y))
+
+    for marker_id, track in tracks.items():
+        color = tracking_colors.get(marker_id, (0, 255, 0))  # Default to green if not found
         for i in range(len(track) - 1):
-            cv2.line(result, track[i], track[i + 1], color, 1)
+            cv2.line(result, tuple(map(int, track[i])), tuple(map(int, track[i + 1])), color, 1)
