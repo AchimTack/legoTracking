@@ -39,7 +39,7 @@ def undistort_and_track():
                 print("Error: Frame not captured.")
                 continue
 
-            centers = detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tracking_points)
+            centers, orientations = detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tracking_points)
 
             # Ensure perspective matrix is set using markers 91-94
             if all(key in centers for key in [91, 92, 93, 94]) and matrix is None:

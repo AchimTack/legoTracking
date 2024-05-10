@@ -102,21 +102,37 @@ def detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tra
     corners, ids, _ = cv2.aruco.detectMarkers(gray, dictionary, parameters=parameters)
 
     centers = {}
+    orientations = {}
+    excluded_ids = {91, 92, 93, 94}
     if ids is not None:
         for i, corner in enumerate(corners):
+            # Calculate the center of the marker
             center = np.mean(corner[0], axis=0)
             marker_id = ids[i][0]
             centers[marker_id] = center
-            if marker_id not in [91, 92, 93, 94]:
+
+            # Process only if marker ID is not in excluded range
+            if marker_id not in excluded_ids:
+                # Calculate the orientation of the marker
+                vector = corner[0][1] - corner[0][0]
+                angle = int(np.arctan2(vector[1], vector[0]) * 180 / np.pi)
+                if angle < 0:
+                    angle += 360
+                orientations[marker_id] = angle
+
+                # Assign tracking color if not already set
                 if marker_id not in tracking_colors:
                     tracking_colors[marker_id] = generate_color(marker_id)
                 if marker_id not in tracking_points:
                     tracking_points[marker_id] = []
                 tracking_points[marker_id].append(center)
+
+                # Draw the marker outline, marker ID, and orientation
                 cv2.polylines(frame, [np.int32(corner)], True, tracking_colors[marker_id], 1)
                 cv2.putText(frame, str(marker_id), tuple(np.int32(corner[0][0])), cv2.FONT_HERSHEY_SIMPLEX, 0.5, tracking_colors[marker_id], 1, cv2.LINE_AA)
+                cv2.putText(frame, str(angle), tuple(np.int32(center)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, tracking_colors[marker_id], 1, cv2.LINE_AA)
 
-    return centers
+    return centers, orientations
 
 
 def get_perspective_transform_matrix(centers, frame_shape):
