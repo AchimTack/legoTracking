@@ -270,6 +270,12 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track):
                 rotated_frame = cv2.rotate(result, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 cv2.imshow('Transformed', rotated_frame)
 
+            # Use Space Key to Start / Reset Tracking and q to save & exit
+            if cv2.waitKey(1) & 0xFF == ord(' '):
+                frame_counter = 0
+                result = None
+                all_transformed_data = []
+
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 

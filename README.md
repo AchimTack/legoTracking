@@ -1,9 +1,9 @@
 # LEGO FLL Robot Tracking System
 
-This repository contains Python scripts for tracking LEGO FLL robots using a ceiling-mounted webcam. They utilize two different tracking methods: ArUco Markers and CSRT Tracking.
+This repository contains Python scripts for tracking LEGO FLL robots using a ceiling-mounted webcam. They utilize two different tracking methods: ArUco Markers and CSRT Tracking (Legacy code, not further in devlopment). Be aware code was in parts created using LLMs and is still in heavy need of refactoring.
 
 ## General Instructions
-Ensure the webcam is properly mounted overhead, looking down onto the table. Make sure to have consistent lighting and no over- or underexposure in webcam image. Webcam resolutions should exceed 1024*768px. Be aware code was in parts created using LLMs and is still in heavy need of refactoring.
+Ensure the webcam is properly mounted overhead, looking down onto the table. Make sure to have consistent lighting and no over- or underexposure in webcam image. Webcam resolutions should exceed 1024*768px.
 
 ## Dependencies
 Both scripts require the following Python libraries:
@@ -20,9 +20,9 @@ Key Features:
 
 Usage:
 The script requires 4 ArUco markers with IDs 91-94 positioned at the four corners of the field. Print them from https://chev.me/arucogen/ and place them accordingly before initiating the script.
-Run the script and wait for webcam to initialize. Tracking starts automatically. End the tracking by clicking "q". Results are saved into folder "runs". Results comprise of a jpg overview, a svg file and a cvs file containing the raw data.
+Run the script and wait for webcam to initialize. Tracking starts automatically and can be reset / restarted using space key. End the tracking by clicking "q". Results are saved into folder "runs". Results comprise of a jpg overview, a svg file and a cvs file containing the raw data.
 
-## LegoTrackerCSRT.py
+## LegoTrackerCSRT.py (Legacy)
 This script employs CSRT (Discriminative Correlation Filter with Channel and Spatial Reliability) for tracking an object selected on the video feed.
 
 Key Features:
