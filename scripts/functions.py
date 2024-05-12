@@ -4,7 +4,6 @@ from datetime import datetime
 import os
 import svgwrite
 import csv
-import subprocess
 
 
 def generate_color(marker_id):
@@ -148,16 +147,39 @@ def detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tra
                 tracking_points[marker_id].append(center)
 
                 # Draw the marker outline, marker ID, and orientation
+                
+                # Text properties
+                font = cv2.FONT_HERSHEY_SIMPLEX
+                font_scale = 0.5
+                thickness = 1
+
+                # Calculate text position to the right of the marker
+                text_position_id = tuple(np.int32(corner[0][0]) + np.array([10, 0]))
+                text_position_angle = tuple(np.int32(center) + np.array([10, 15]))
+
+                # Outline color and text color
+                outline_color = (255, 255, 255)  # White outline
+                text_color = (0, 0, 0)  # Black text
+
+                # Draw text with outline
+                cv2.putText(frame, str(marker_id), text_position_id, font, font_scale, outline_color, thickness+2, cv2.LINE_AA)
+                cv2.putText(frame, str(marker_id), text_position_id, font, font_scale, text_color, thickness, cv2.LINE_AA)
+
+                cv2.putText(frame, str(angle), text_position_angle, font, font_scale, outline_color, thickness+2, cv2.LINE_AA)
+                cv2.putText(frame, str(angle), text_position_angle, font, font_scale, text_color, thickness, cv2.LINE_AA)
+
+
+
                 cv2.polylines(frame, [np.int32(corner)], True, tracking_colors[marker_id], 1)
-                cv2.putText(frame, str(marker_id), tuple(np.int32(corner[0][0])), cv2.FONT_HERSHEY_SIMPLEX, 0.5, tracking_colors[marker_id], 1, cv2.LINE_AA)
-                cv2.putText(frame, str(angle), tuple(np.int32(center)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, tracking_colors[marker_id], 1, cv2.LINE_AA)
+                #cv2.putText(frame, str(marker_id), tuple(np.int32(corner[0][0])), cv2.FONT_HERSHEY_SIMPLEX, 0.5, tracking_colors[marker_id], 1, cv2.LINE_AA)
+                #cv2.putText(frame, str(angle), tuple(np.int32(center)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, tracking_colors[marker_id], 1, cv2.LINE_AA)
 
     return centers, orientations
 
 
 
-def get_perspective_transform_matrix(centers, frame_shape):
-    aspect_ratio = 114 / 205
+def get_perspective_transform_matrix(matLength, matWidth, centers, frame_shape):
+    aspect_ratio = matWidth / matLength
     height = frame_shape[0]
     width = int(height * aspect_ratio)
 
@@ -186,3 +208,74 @@ def draw_transformed_tracks(result, all_transformed_data, tracking_colors):
         color = tracking_colors.get(marker_id, (0, 255, 0))  # Default to green if not found
         for i in range(len(track) - 1):
             cv2.line(result, tuple(map(int, track[i])), tuple(map(int, track[i + 1])), color, 1)
+
+def undistort_and_track(matLength, matWidth, marker_ids_to_track):
+    print('starting...')
+    cap = cv2.VideoCapture(0)
+    frame_width = 1920
+    frame_height = 1080
+
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
+    cap.set(cv2.CAP_PROP_FPS, 30)
+
+    if not cap.isOpened():
+        print("Error: Camera could not be opened.")
+        return
+
+    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
+    parameters = cv2.aruco.DetectorParameters()
+    parameters.adaptiveThreshWinSizeStep = 2
+    parameters.adaptiveThreshWinSizeMin = 3
+    parameters.adaptiveThreshWinSizeMax = 23
+
+    matrix = None
+    mask_contour = None
+    tracking_colors = {}
+    tracking_points = {}
+    width, height = 0, 0
+    result = None
+    all_transformed_data = []
+
+    try:
+        frame_counter = 0
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("Error: Frame not captured.")
+                continue
+
+            centers, orientations = detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tracking_points)
+
+            # Ensure perspective matrix is set using markers 91-94
+            if all(key in centers for key in [91, 92, 93, 94]) and matrix is None:
+                matrix, mask_contour, width, height = get_perspective_transform_matrix(matLength, matWidth, centers, frame.shape)
+                print('Found Distortion Matrix:')
+                print(matrix)
+
+            if matrix is not None:
+                result = cv2.warpPerspective(frame, matrix, (width, height))
+
+                for marker_id in marker_ids_to_track:
+                    if marker_id in tracking_points:
+                        transformed_points = transform_points(tracking_points[marker_id], matrix)
+                        filtered_points = [point for point in transformed_points if is_point_inside_mask(point, mask_contour)]
+                        if filtered_points:
+                            color = tracking_colors[marker_id]
+                            orientation = orientations.get(marker_id, '')
+                            all_transformed_data.append([frame_counter, marker_id, filtered_points[-1][0], filtered_points[-1][1], orientation])
+
+                draw_transformed_tracks(result, all_transformed_data, tracking_colors)
+ 
+                rotated_frame = cv2.rotate(result, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                cv2.imshow('Transformed', rotated_frame)
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+            frame_counter += 1
+    finally:
+        if result is not None:
+            save_tracking_results(result, all_transformed_data)
+        cap.release()
+        cv2.destroyAllWindows()
