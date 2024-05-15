@@ -7,9 +7,7 @@ Ensure the webcam is properly mounted overhead, looking down onto the table. Mak
 
 ## Dependencies
 Both scripts require the following Python libraries:
-- OpenCV
-- NumPy
-- svgwrite 
+'pip install opencv-python Pillow pyyaml svgwrite numpy'
 
 ## LegoTrackerArucode.py
 This script uses ArUco markers for tracking. It includes functions for setting up the webcam, defining a region of interest by placing Aruco markers in the 4 corners of the FLL mat, and applying a perspective transformation to track the robot that needs a tracker marker as well in a transformed top-down view.
