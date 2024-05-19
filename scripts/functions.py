@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import svgwrite
 import csv
+import time
 
 
 def generate_color(marker_id):
@@ -20,6 +21,7 @@ def generate_color(marker_id):
         (130, 0, 75)   # Indigo
     ]
     return predefined_colors[(marker_id - 1) % len(predefined_colors)]
+
 
 def save_tracking_results(transformed_frame, all_transformed_data):
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -118,7 +120,22 @@ def is_point_inside_mask(point, mask_contour):
 def detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tracking_points):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    corners, ids, _ = cv2.aruco.detectMarkers(gray, dictionary, parameters=parameters)
+
+def detect_and_track_markers(frame, tracking_colors, tracking_points):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    if cv2.__version__.startswith('3'):  # For OpenCV 3.x
+        dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
+        parameters = cv2.aruco.DetectorParameters()
+        parameters.adaptiveThreshWinSizeStep = 2
+        parameters.adaptiveThreshWinSizeMin = 3
+        parameters.adaptiveThreshWinSizeMax = 23
+        corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(gray, dictionary, parameters=parameters)
+    else:  # For OpenCV 4.x and above
+        dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
+        parameters =  cv2.aruco.DetectorParameters()
+        detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+        corners, ids, rejectedImgPoints = detector.detectMarkers(gray)
 
     centers = {}
     orientations = {}
@@ -145,8 +162,6 @@ def detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tra
                 if marker_id not in tracking_points:
                     tracking_points[marker_id] = []
                 tracking_points[marker_id].append(center)
-
-                # Draw the marker outline, marker ID, and orientation
                 
                 # Text properties
                 font = cv2.FONT_HERSHEY_SIMPLEX
@@ -168,14 +183,9 @@ def detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tra
                 cv2.putText(frame, str(angle), text_position_angle, font, font_scale, outline_color, thickness+2, cv2.LINE_AA)
                 cv2.putText(frame, str(angle), text_position_angle, font, font_scale, text_color, thickness, cv2.LINE_AA)
 
-
-
                 cv2.polylines(frame, [np.int32(corner)], True, tracking_colors[marker_id], 1)
-                #cv2.putText(frame, str(marker_id), tuple(np.int32(corner[0][0])), cv2.FONT_HERSHEY_SIMPLEX, 0.5, tracking_colors[marker_id], 1, cv2.LINE_AA)
-                #cv2.putText(frame, str(angle), tuple(np.int32(center)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, tracking_colors[marker_id], 1, cv2.LINE_AA)
-
+                
     return centers, orientations
-
 
 
 def get_perspective_transform_matrix(matLength, matWidth, centers, frame_shape):
@@ -209,6 +219,7 @@ def draw_transformed_tracks(result, all_transformed_data, tracking_colors):
         for i in range(len(track) - 1):
             cv2.line(result, tuple(map(int, track[i])), tuple(map(int, track[i + 1])), color, 1)
 
+
 def undistort_and_track(matLength, matWidth, marker_ids_to_track):
     print('starting...')
     cap = cv2.VideoCapture(0)
@@ -222,12 +233,6 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track):
     if not cap.isOpened():
         print("Error: Camera could not be opened.")
         return
-
-    dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
-    parameters = cv2.aruco.DetectorParameters()
-    parameters.adaptiveThreshWinSizeStep = 2
-    parameters.adaptiveThreshWinSizeMin = 3
-    parameters.adaptiveThreshWinSizeMax = 23
 
     matrix = None
     mask_contour = None
@@ -245,7 +250,7 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track):
                 print("Error: Frame not captured.")
                 continue
 
-            centers, orientations = detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tracking_points)
+            centers, orientations = detect_and_track_markers(frame, tracking_colors, tracking_points)
 
             # Ensure perspective matrix is set using markers 91-94
             if all(key in centers for key in [91, 92, 93, 94]) and matrix is None:
@@ -270,18 +275,25 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track):
                 rotated_frame = cv2.rotate(result, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 cv2.imshow('Transformed', rotated_frame)
 
-            # Use Space Key to Start / Reset Tracking and q to save & exit
-            if cv2.waitKey(1) & 0xFF == ord(' '):
+            key = cv2.waitKey(1) & 0xFF
+
+            if key == ord(' '):
                 frame_counter = 0
                 result = None
                 all_transformed_data = []
 
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            if key == ord('s'):
+                if result is not None:
+                    save_tracking_results(result, all_transformed_data)
+                frame_counter = 0
+                result = None
+                all_transformed_data = []
+
+            if key == ord('q'):
+                cv2.destroyAllWindows()
                 break
 
             frame_counter += 1
+
     finally:
-        if result is not None:
-            save_tracking_results(result, all_transformed_data)
         cap.release()
-        cv2.destroyAllWindows()
