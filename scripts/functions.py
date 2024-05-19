@@ -4,7 +4,6 @@ from datetime import datetime
 import os
 import svgwrite
 import csv
-import time
 
 
 def generate_color(marker_id):
@@ -23,7 +22,7 @@ def generate_color(marker_id):
     return predefined_colors[(marker_id - 1) % len(predefined_colors)]
 
 
-def save_tracking_results(transformed_frame, all_transformed_data):
+def save_tracking_results(transformed_frame, all_transformed_data, all_transformed_data_mat, img_output_width):
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     run_folder = f'runs/{timestamp}'
     if not os.path.exists(run_folder):
@@ -63,21 +62,20 @@ def save_tracking_results(transformed_frame, all_transformed_data):
     # Save the final combined image (desaturated background with colorful tracks)
     cv2.imwrite(f'{run_folder}/{timestamp}.jpg', colorful_frame)
 
-    # Calculate the aspect ratio and define SVG dimensions
+    # Calculate the aspect ratio and define image output dimensions
     frame_height, frame_width = rotated_frame.shape[:2]
     aspect_ratio = frame_height / frame_width
-    svg_width = 1000
-    svg_height = int(svg_width * aspect_ratio)
+    img_output_height = int(img_output_width * aspect_ratio) 
 
     # Create an SVG drawing with rotated dimensions
     dwg = svgwrite.Drawing(
         filename=f'{run_folder}/{timestamp}.svg',
-        size=(svg_width, svg_height),
-        viewBox=f'0 0 {svg_width} {svg_height}'
+        size=(img_output_width, img_output_height),
+        viewBox=f'0 0 {img_output_width} {img_output_height}'
     )
 
     # Add a grey rectangle as the background
-    grey_background = dwg.rect(insert=(0, 0), size=(svg_width, svg_height), fill='grey')
+    grey_background = dwg.rect(insert=(0, 0), size=(img_output_width, img_output_height), fill='grey')
     dwg.add(grey_background)
 
     # Draw the tracks in the rotated SVG
@@ -86,14 +84,21 @@ def save_tracking_results(transformed_frame, all_transformed_data):
         color_str = f'rgb({color[2]},{color[1]},{color[0]})'
         for i in range(len(track) - 1):
             start_point = (
-                int(track[i][0] * svg_width / frame_width),
-                int(track[i][1] * svg_height / frame_height)
+                int(track[i][0] * img_output_width / frame_width),
+                int(track[i][1] * img_output_height / frame_height)
             )
             end_point = (
-                int(track[i + 1][0] * svg_width / frame_width),
-                int(track[i + 1][1] * svg_height / frame_height)
+                int(track[i + 1][0] * img_output_width / frame_width),
+                int(track[i + 1][1] * img_output_height / frame_height)
             )
             dwg.add(dwg.line(start=start_point, end=end_point, stroke=color_str, stroke_width=2))
+
+            # Debug prints: Moved INSIDE the loop
+            print("Original Coordinates (x, y):", x, y) 
+            print("Adjusted Coordinates (adjusted_x, adjusted_y):", adjusted_x, adjusted_y)
+            print("Scaled SVG Coordinates:", 
+                int(adjusted_x * img_output_width / frame_width), 
+                int(adjusted_y * img_output_height / frame_height))
 
     dwg.save()
 
@@ -102,7 +107,15 @@ def save_tracking_results(transformed_frame, all_transformed_data):
     with open(csv_file_path, mode='w', newline='') as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(['Frame', 'Marker', 'X', 'Y', 'Orientation'])
-        csv_writer.writerows(all_transformed_data)
+        csv_writer.writerows(all_transformed_data_mat)
+
+
+    #Debug prints
+    print("Original Coordinates (x, y):", x, y) 
+    print("Adjusted Coordinates (adjusted_x, adjusted_y):", adjusted_x, adjusted_y)
+    print("Scaled SVG Coordinates:", 
+      int(adjusted_x * img_output_width / frame_width), 
+      int(adjusted_y * img_output_height / frame_height))
         
 
 def transform_points(points, matrix):
@@ -117,11 +130,7 @@ def is_point_inside_mask(point, mask_contour):
     return cv2.pointPolygonTest(mask_contour, point, False) >= 0
 
 
-def detect_and_track_markers(frame, dictionary, parameters, tracking_colors, tracking_points):
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-
-def detect_and_track_markers(frame, tracking_colors, tracking_points):
+def detect_and_track_markers(frame, tracking_colors, tracking_points, edge_marker_ids):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     if cv2.__version__.startswith('3'):  # For OpenCV 3.x
@@ -139,7 +148,7 @@ def detect_and_track_markers(frame, tracking_colors, tracking_points):
 
     centers = {}
     orientations = {}
-    excluded_ids = {91, 92, 93, 94}
+    excluded_ids = edge_marker_ids
     if ids is not None:
         for i, corner in enumerate(corners):
             # Calculate the center of the marker
@@ -220,11 +229,26 @@ def draw_transformed_tracks(result, all_transformed_data, tracking_colors):
             cv2.line(result, tuple(map(int, track[i])), tuple(map(int, track[i + 1])), color, 1)
 
 
-def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_ids):
+def transform_data_to_mat_dimensions(all_transformed_data, matLength, matWidth, warped_width, warped_height):
+    all_transformed_data_mat = []
+    for frame, marker_id, x, y, orientation in all_transformed_data: 
+        # Correctly scale SVG coordinates to mat dimensions:
+        new_x = (x / warped_width) * matWidth
+        new_y = (y / warped_height) * matLength 
+
+        all_transformed_data_mat.append([frame, marker_id, new_x, new_y, orientation])
+    
+
+    # Debug Prints:
+    print("CSV Coordinates (new_x, new_y):", new_x, new_y)
+
+    return all_transformed_data_mat
+
+
+def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_ids, cam_id, frame_width, frame_height, img_output_width):
     print('starting...')
-    cap = cv2.VideoCapture(0)
-    frame_width = 1920
-    frame_height = 1080
+
+    cap = cv2.VideoCapture(cam_id)
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, frame_width)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, frame_height)
@@ -250,7 +274,7 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_id
                 print("Error: Frame not captured.")
                 continue
 
-            centers, orientations = detect_and_track_markers(frame, tracking_colors, tracking_points)
+            centers, orientations = detect_and_track_markers(frame, tracking_colors, tracking_points, edge_marker_ids)
 
             # Ensure perspective matrix is set using markers 91-94
             if all(key in centers for key in edge_marker_ids) and matrix is None:
@@ -259,7 +283,8 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_id
                 print(matrix)
 
             if matrix is not None:
-                result = cv2.warpPerspective(frame, matrix, (width, height))
+                result = cv2.warpPerspective(frame, matrix, (width, height)) # Corrected: Removed the duplicate line
+                warped_height, warped_width = result.shape[:2]
 
                 for marker_id in marker_ids_to_track:
                     if marker_id in tracking_points:
@@ -284,7 +309,12 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_id
 
             if key == ord('s'):
                 if result is not None:
-                    save_tracking_results(result, all_transformed_data)
+                    # Calculate the aspect ratio and define image output dimensions
+                    frame_height, frame_width = rotated_frame.shape[:2]
+                    aspect_ratio = frame_height / frame_width
+                    img_output_height = int(img_output_width * aspect_ratio)
+                    all_transformed_data_mat = transform_data_to_mat_dimensions(all_transformed_data, matLength, matWidth, warped_width, warped_height)                 
+                    save_tracking_results(result, all_transformed_data, all_transformed_data_mat, img_output_width)
                 frame_counter = 0
                 result = None
                 all_transformed_data = []
