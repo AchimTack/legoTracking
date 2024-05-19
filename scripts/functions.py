@@ -220,7 +220,7 @@ def draw_transformed_tracks(result, all_transformed_data, tracking_colors):
             cv2.line(result, tuple(map(int, track[i])), tuple(map(int, track[i + 1])), color, 1)
 
 
-def undistort_and_track(matLength, matWidth, marker_ids_to_track):
+def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_ids):
     print('starting...')
     cap = cv2.VideoCapture(0)
     frame_width = 1920
@@ -253,7 +253,7 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track):
             centers, orientations = detect_and_track_markers(frame, tracking_colors, tracking_points)
 
             # Ensure perspective matrix is set using markers 91-94
-            if all(key in centers for key in [91, 92, 93, 94]) and matrix is None:
+            if all(key in centers for key in edge_marker_ids) and matrix is None:
                 matrix, mask_contour, width, height = get_perspective_transform_matrix(matLength, matWidth, centers, frame.shape)
                 print('Found Distortion Matrix:')
                 print(matrix)
