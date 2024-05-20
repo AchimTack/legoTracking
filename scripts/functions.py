@@ -8,18 +8,19 @@ import csv
 
 def generate_color(marker_id):
     predefined_colors = [
-        (0, 0, 255),   # Red
-        (255, 0, 0),   # Blue
-        (0, 255, 0),   # Green
-        (0, 255, 255), # Yellow
-        (255, 0, 255), # Magenta
-        (255, 255, 0), # Cyan
-        (0, 165, 255), # Orange
-        (147, 20, 255),# Deep Pink
+        (255, 0, 0),   # Red
+        (0, 0, 255),   # Blue
         (0, 128, 0),   # Dark Green
-        (130, 0, 75)   # Indigo
+        (255, 255, 50), # Yellow
+        (255, 0, 255), # Magenta
+        (50, 255, 255), # Cyan
+        (255, 165, 0), # Orange
+        (255, 20, 147),# Deep Pink
+        (128, 128, 0), # Olive
+        (75, 0, 130)   # Indigo
     ]
     return predefined_colors[(marker_id - 1) % len(predefined_colors)]
+
 
 
 def save_tracking_results(transformed_frame, all_transformed_data, all_transformed_data_mat, img_output_width, video_frames, export_jpg,export_svg,export_csv,export_mp4):
@@ -131,6 +132,13 @@ def is_point_inside_mask(point, mask_contour):
 
 def detect_and_track_markers(frame, tracking_colors, tracking_points, edge_marker_ids):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Define a sharpening kernel
+    sharpening_kernel = np.array([[0, -1, 0],
+                                [-1, 5, -1],
+                                [0, -1, 0]])
+
+    # Apply the sharpening kernel to the grayscale image
+    gray = cv2.filter2D(gray, -1, sharpening_kernel)
 
     if cv2.__version__.startswith('3'):  # For OpenCV 3.x
         dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
@@ -236,10 +244,6 @@ def transform_data_to_mat_dimensions(all_transformed_data, matLength, matWidth, 
         new_y = (y / warped_height) * matLength 
 
         all_transformed_data_mat.append([frame, marker_id, new_x, new_y, orientation])
-    
-
-    # Debug Prints:
-    print("CSV Coordinates (new_x, new_y):", new_x, new_y)
 
     return all_transformed_data_mat
 
@@ -265,6 +269,7 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_id
     result = None
     all_transformed_data = []
     video_frames = []
+
 
     try:
         frame_counter = 0
