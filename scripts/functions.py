@@ -22,7 +22,7 @@ def generate_color(marker_id):
     return predefined_colors[(marker_id - 1) % len(predefined_colors)]
 
 
-def save_tracking_results(transformed_frame, all_transformed_data, all_transformed_data_mat, img_output_width):
+def save_tracking_results(transformed_frame, all_transformed_data, all_transformed_data_mat, img_output_width, video_frames, export_jpg,export_svg,export_csv,export_mp4):
     timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
     run_folder = f'runs/{timestamp}'
     if not os.path.exists(run_folder):
@@ -60,7 +60,8 @@ def save_tracking_results(transformed_frame, all_transformed_data, all_transform
             cv2.line(colorful_frame, start_point, end_point, color, 2)
 
     # Save the final combined image (desaturated background with colorful tracks)
-    cv2.imwrite(f'{run_folder}/{timestamp}.jpg', colorful_frame)
+    if export_jpg == 1:
+        cv2.imwrite(f'{run_folder}/{timestamp}.jpg', colorful_frame)
 
     # Calculate the aspect ratio and define image output dimensions
     frame_height, frame_width = rotated_frame.shape[:2]
@@ -92,30 +93,28 @@ def save_tracking_results(transformed_frame, all_transformed_data, all_transform
                 int(track[i + 1][1] * img_output_height / frame_height)
             )
             dwg.add(dwg.line(start=start_point, end=end_point, stroke=color_str, stroke_width=2))
-
-            # Debug prints: Moved INSIDE the loop
-            print("Original Coordinates (x, y):", x, y) 
-            print("Adjusted Coordinates (adjusted_x, adjusted_y):", adjusted_x, adjusted_y)
-            print("Scaled SVG Coordinates:", 
-                int(adjusted_x * img_output_width / frame_width), 
-                int(adjusted_y * img_output_height / frame_height))
-
-    dwg.save()
+    
+    if export_svg == 1:
+        dwg.save()
 
     # Save tracking data to a CSV file
     csv_file_path = f'{run_folder}/{timestamp}.csv'
-    with open(csv_file_path, mode='w', newline='') as csv_file:
-        csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Frame', 'Marker', 'X', 'Y', 'Orientation'])
-        csv_writer.writerows(all_transformed_data_mat)
+    if export_csv == 1:
+        with open(csv_file_path, mode='w', newline='') as csv_file:
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(['Frame', 'Marker', 'X', 'Y', 'Orientation'])
+            csv_writer.writerows(all_transformed_data_mat)
 
+    # Save the video 
+    frame_height, frame_width = rotated_frame.shape[:2]
+    
+    if export_mp4 == 1:
+        out = cv2.VideoWriter(f'{run_folder}/{timestamp}.mp4', cv2.VideoWriter_fourcc(*'mp4v'), 30, (frame_width, frame_height))
+        for frame in video_frames:
+            out.write(frame)
+        out.release()
 
-    #Debug prints
-    print("Original Coordinates (x, y):", x, y) 
-    print("Adjusted Coordinates (adjusted_x, adjusted_y):", adjusted_x, adjusted_y)
-    print("Scaled SVG Coordinates:", 
-      int(adjusted_x * img_output_width / frame_width), 
-      int(adjusted_y * img_output_height / frame_height))
+    print('run saved')
         
 
 def transform_points(points, matrix):
@@ -245,7 +244,7 @@ def transform_data_to_mat_dimensions(all_transformed_data, matLength, matWidth, 
     return all_transformed_data_mat
 
 
-def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_ids, cam_id, frame_width, frame_height, img_output_width):
+def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_ids, cam_id, frame_width, frame_height, img_output_width, export_jpg,export_svg,export_csv,export_mp4):
     print('starting...')
 
     cap = cv2.VideoCapture(cam_id)
@@ -265,6 +264,7 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_id
     width, height = 0, 0
     result = None
     all_transformed_data = []
+    video_frames = []
 
     try:
         frame_counter = 0
@@ -283,7 +283,7 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_id
                 print(matrix)
 
             if matrix is not None:
-                result = cv2.warpPerspective(frame, matrix, (width, height)) # Corrected: Removed the duplicate line
+                result = cv2.warpPerspective(frame, matrix, (width, height))
                 warped_height, warped_width = result.shape[:2]
 
                 for marker_id in marker_ids_to_track:
@@ -299,6 +299,7 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_id
  
                 rotated_frame = cv2.rotate(result, cv2.ROTATE_90_COUNTERCLOCKWISE)
                 cv2.imshow('Transformed', rotated_frame)
+                video_frames.append(rotated_frame)
 
             key = cv2.waitKey(1) & 0xFF
 
@@ -306,6 +307,7 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_id
                 frame_counter = 0
                 result = None
                 all_transformed_data = []
+                video_frames = []
 
             if key == ord('s'):
                 if result is not None:
@@ -314,10 +316,12 @@ def undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_id
                     aspect_ratio = frame_height / frame_width
                     img_output_height = int(img_output_width * aspect_ratio)
                     all_transformed_data_mat = transform_data_to_mat_dimensions(all_transformed_data, matLength, matWidth, warped_width, warped_height)                 
-                    save_tracking_results(result, all_transformed_data, all_transformed_data_mat, img_output_width)
+                    save_tracking_results(result, all_transformed_data, all_transformed_data_mat, img_output_width, video_frames, export_jpg, export_svg, export_csv, export_mp4)
+
                 frame_counter = 0
                 result = None
                 all_transformed_data = []
+                video_frames = []
 
             if key == ord('q'):
                 cv2.destroyAllWindows()

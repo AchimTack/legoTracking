@@ -13,7 +13,14 @@ frame_height = 1080
 marker_ids_to_track = set(range(1, 10))
 edge_marker_ids = [91, 92, 93, 94]
 
-# Define jpg and svg output parameters
+# Define export parameters
+export_jpg=1
+export_svg=0
+export_csv=1
+export_mp4=1
 img_output_width = 1000
 
-undistort_and_track(matLength, matWidth, marker_ids_to_track, edge_marker_ids, cam_id, frame_width, frame_height, img_output_width)
+undistort_and_track(matLength, matWidth, 
+                    marker_ids_to_track, edge_marker_ids, 
+                    cam_id, frame_width, frame_height, img_output_width,
+                    export_jpg,export_svg,export_csv,export_mp4)
