@@ -1,34 +1,60 @@
-# LEGO FLL Robot Tracking System
+# LEGO Tracker with ArUco Markers
 
-This repository contains Python scripts for tracking LEGO FLL robots using a ceiling-mounted webcam. They utilize two different tracking methods: ArUco Markers and CSRT Tracking (Legacy code, not further in devlopment). Be aware code was in parts created using LLMs and is still in heavy need of refactoring.
+This repository contains the code for a LEGO tracking system that utilizes ArUco markers (either to be brick-built or printed as stickers) to detect and visualize LEGO Robots (WRO / FLL) on a tracking mat using computer vision techniques. Be aware code was in parts created using LLMs and is still in heavy need of refactoring.
 
-## General Instructions
-Ensure the webcam is properly mounted overhead, looking down onto the table. Make sure to have consistent lighting and no over- or underexposure in webcam image. Webcam resolutions should exceed 1024*768px.
+## Description
 
-## Dependencies
-Both scripts require the following Python libraries:
-'pip install opencv-python Pillow pyyaml svgwrite numpy'
+The project comprises two main scripts:
+- `functions.py`: Includes helper functions to handle marker detection, image manipulation, and export functionalities.
+- `LegoTrackerArucode.py`: Implements the tracking logic using the functions defined in `functions.py`. This script sets up the camera parameters, defines the tracking environment, and processes the video stream to identify and record the positions of LEGO pieces based on ArUco markers.
 
-## LegoTrackerArucode.py
-This script uses ArUco markers for tracking. It includes functions for setting up the webcam, defining a region of interest by placing Aruco markers in the 4 corners of the FLL mat, and applying a perspective transformation to track the robot that needs a tracker marker as well in a transformed top-down view.
+## Features
 
-Key Features:
-- Real-time perspective transformation for a top-down view.
-- Tracking based on ArUco markers.
+- **Marker Detection**: Utilizes OpenCV to detect pre-defined ArUco markers.
+- **Visualization**: Generates visual outputs in various formats including JPEG, SVG, and CSV files for data logging.
+- **Customizable Tracking**: Users can specify which markers to track, reducing false positives and focusing on relevant pieces.
 
-Usage:
-The script requires 4 ArUco markers with IDs 91-94 positioned at the four corners of the field. Print them from https://chev.me/arucogen/ and place them accordingly before initiating the script.
-Run the script and wait for webcam to initialize. Tracking starts automatically and can be reset / restarted using space key. End the tracking by clicking "q". Results are saved into folder "runs". Results comprise of a jpg overview, a svg file and a cvs file containing the raw data.
+## Setup
 
-## LegoTrackerCSRT.py (Legacy)
-This script employs CSRT (Discriminative Correlation Filter with Channel and Spatial Reliability) for tracking an object selected on the video feed.
+### Dependencies:  
+   Ensure you have Python installed along with the following packages:
+   - `opencv-contrib-python`
+   - `numpy`
+   - `svgwrite`
 
-Key Features:
-- Initialization of tracking with a user-defined bounding box.
-- Real-time object tracking with display of tracking status and frame rate.
-- Saving tracking results in JPEG and SVG formats.
+   Install them using pip:
+   ```bash
+   pip install opencv-contrib-python numpy svgwrite
+   ```
 
-Usage:
-Run the script and interact with the webcam feed by clicking to define the object of interest by drawing a rectangle over it. Finish by pressing enter key. Tracking starts automatically. End the tracking by clicking "q". Results are saved into folder "runs".
+### Camera Setup:  
+   Connect a camera and ensure it is configured as per the requirements specified in `LegoTrackerArucode.py`. Adjust the `cam_id`, `frame_width`, and `frame_height` parameters as needed.
 
 
+## Prepare Tracking
+- Ensure the webcam is properly mounted overhead, looking down onto the table. Make sure to have consistent lighting and no over- or underexposure in webcam image.
+- Webcam resolutions should exceed 1024*768px.
+- The script requires 4 ArUco markers with distinct IDs (example 91-94) to be positioned at the four corners of the field. Print them from https://chev.me/arucogen/ and place them accordingly before initiating the script.
+- Modify `matLength` and `matWidth` in `LegoTrackerArucode.py` to match the dimensions of your tracking mat.
+- Update `marker_ids_to_track` to change the set of ArUco markers that should be detected.
+
+
+## Tracking
+Run the `LegoTrackerArucode.py` script to start the tracking system:
+```bash
+python LegoTrackerArucode.py
+```
+- Wait for webcam to initialize, tracking starts automatically when all 4 corner markers have been detected.
+- Reset / restart tracking using space key.
+- Save the results of the current track by pressing 's'.
+- End the tracking by clicking "q". 
+
+## Output
+
+Results are saved into folder "runs" (depending which export type is activated in `LegoTrackerArucode.py`)
+
+The system can export:
+- JPEG images of the tracked scene.
+- SVG files for graphical representation.
+- CSV files logging the detected markers and their positions.
+- MP4 video file capturing the tracking process.
