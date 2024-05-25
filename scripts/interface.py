@@ -26,31 +26,21 @@ export_csv = IntVar()
 export_mp4 = IntVar()
 img_output_width = 1000
 
-
-
-
 root.title('LegoTracker Arucode')
 root.configure(background='white')
 
-title = Label(root, text='Lego Arucode Tracker')
-btn_export_jpg = Checkbutton(root, text='Export JPG', variable=export_jpg, onvalue=1, offvalue=0)
-btn_export_svg = Checkbutton(root, text='Export SVG', variable=export_svg, onvalue=1, offvalue=0)
-btn_export_csv = Checkbutton(root, text='Export CSV', variable=export_csv, onvalue=1, offvalue=0)
-btn_export_mp4 = Checkbutton(root, text='Export MP4', variable=export_mp4, onvalue=1, offvalue=0)
-
-title.pack()
-btn_export_jpg.pack()
-btn_export_svg.pack()
-btn_export_csv.pack()
-btn_export_mp4.pack()
+Label(root, text='Lego Arucode Tracker').pack()
+Checkbutton(root, text='Export JPG', variable=export_jpg, onvalue=1, offvalue=0).pack()
+Checkbutton(root, text='Export SVG', variable=export_svg, onvalue=1, offvalue=0).pack()
+Checkbutton(root, text='Export CSV', variable=export_csv, onvalue=1, offvalue=0).pack()
+Checkbutton(root, text='Export MP4', variable=export_mp4, onvalue=1, offvalue=0).pack()
+Button(root, text='Fertig', command=root.destroy).pack()
 root.mainloop()
 
-print(export_svg.get(), export_jpg.get(), export_mp4.get(), export_csv.get())
 export_svg, export_jpg, export_mp4, export_csv = export_svg.get(), export_jpg.get(), export_mp4.get(), export_csv.get()
 print(export_svg, export_jpg, export_mp4, export_csv)
 
-
 undistort_and_track(matLength, matWidth,
-                        marker_ids_to_track, edge_marker_ids,
-                        cam_id, frame_width, frame_height, img_output_width,
-                        export_jpg, export_svg, export_csv, export_mp4)
+                    marker_ids_to_track, edge_marker_ids,
+                    cam_id, frame_width, frame_height, img_output_width,
+                    export_jpg, export_svg, export_csv, export_mp4)
