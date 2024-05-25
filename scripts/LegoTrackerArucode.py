@@ -5,7 +5,7 @@ matLength = 236
 matWidth = 114
 
 # Set Webcam Parameters
-cam_id = 0
+cam_id = 1
 frame_width = 1920
 frame_height = 1080
 
