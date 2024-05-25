@@ -1,6 +1,6 @@
 from functions import undistort_and_track
 
-# Set mat dimensions
+# Set mat dimensions in cm
 matLength = 236
 matWidth = 114
 
@@ -13,7 +13,7 @@ frame_height = 1080
 marker_ids_to_track = set(range(1, 10))
 edge_marker_ids = [91, 92, 93, 94]
 
-# Define export parameters
+# Define export parameters (1=true, 0=false)
 export_jpg=1
 export_svg=1
 export_csv=1
